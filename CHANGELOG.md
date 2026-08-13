@@ -254,6 +254,9 @@ By @sagudev in [#10109](https://github.com/gfx-rs/wgpu/pull/10109).
 #### WebGPU
 
 - Upgrade vendored WebGPU bindings and `wasm-bindgen` to 0.2.127. This fixes a panic “`can't access property "info", arg0 is null`” when using the WebGPU backend and `requestAdapter()` fails. By @beicause in [#10034](https://github.com/gfx-rs/wgpu/pull/10034), backported in [#10105](https://github.com/gfx-rs/wgpu/pull/10105).
+### Added/New Features
+
+- Added a Vulkan HAL method to acquire external texture queue ownership.
 
 ## v30.0.0 (2026-07-01)
 
@@ -4879,21 +4882,18 @@ Manual concatenation of `cargo public-api --diff-git-checkouts v0.13.2 v0.14.0 -
 
 ```diff
 Removed items from the public API
-=================================
--pub fn wgpu::Surface::get_supported_modes(&self, adapter: &wgpu::Adapter) -> Vec<PresentMode>
+==========================-pub fn wgpu::Surface::get_supported_modes(&self, adapter: &wgpu::Adapter) -> Vec<PresentMode>
 -pub const wgpu::Features::DEPTH24UNORM_STENCIL8: Self
 -pub enum variant wgpu::TextureFormat::Depth24UnormStencil8
 
 Changed items in the public API
-===============================
--pub unsafe fn wgpu::Instance::as_hal<A: wgc::hub::HalApi, F: FnOnce(Option<&<A as >::Instance>) -> R, R>(&self, hal_instance_callback: F) -> R
+========================-pub unsafe fn wgpu::Instance::as_hal<A: wgc::hub::HalApi, F: FnOnce(Option<&<A as >::Instance>) -> R, R>(&self, hal_instance_callback: F) -> R
 +pub unsafe fn wgpu::Instance::as_hal<A: wgc::hub::HalApi>(&self) -> Option<&<A as >::Instance>
 -pub unsafe fn wgpu::Instance::create_surface<W: raw_window_handle::HasRawWindowHandle>(&self, window: &W) -> wgpu::Surface
 +pub unsafe fn wgpu::Instance::create_surface<W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle>(&self, window: &W) -> wgpu::Surface
 
 Added items to the public API
-=============================
-+pub fn wgpu::Buffer::size(&self) -> wgt::BufferAddress
+======================+pub fn wgpu::Buffer::size(&self) -> wgt::BufferAddress
 +pub fn wgpu::Buffer::usage(&self) -> BufferUsages
 +pub fn wgpu::Surface::get_supported_alpha_modes(&self, adapter: &wgpu::Adapter) -> Vec<CompositeAlphaMode>
 +pub fn wgpu::Surface::get_supported_present_modes(&self, adapter: &wgpu::Adapter) -> Vec<PresentMode>

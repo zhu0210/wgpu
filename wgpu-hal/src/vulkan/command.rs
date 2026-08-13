@@ -39,6 +39,69 @@ impl super::Texture {
 }
 
 impl super::CommandEncoder {
+    /// Records an image ownership acquire barrier from an external queue family.
+    ///
+    /// Do not mix raw HAL commands with wgpu encoding calls on the same command encoder while
+    /// recording. After this method returns, the encoder may be finished and submitted through
+    /// the normal queue; later wgpu encoders continue tracked transitions from the same
+    /// `initial_state`.
+    ///
+    /// # Safety
+    ///
+    /// - The encoder must be recording and must not be inside a render, compute, or ray-tracing
+    ///   pass.
+    /// - `texture` must belong to the same Vulkan device as the encoder.
+    /// - `range`, `texture.format`, and `usage` must match the image subresources and layout
+    ///   recorded by `create_texture_from_hal`; in particular, `usage` must equal its
+    ///   `initial_state`.
+    /// - `usage` must be a non-empty concrete texture state and must not contain `COMPLEX`,
+    ///   `UNKNOWN`, or `TRANSIENT`.
+    /// - The producer's release barrier and external synchronization must have completed, and
+    ///   the image must currently be owned by `source_queue_family_index`.
+    /// - `source_queue_family_index` must be `VK_QUEUE_FAMILY_EXTERNAL_KHR` or
+    ///   `VK_QUEUE_FAMILY_FOREIGN_EXT`, with the corresponding external-memory extension
+    ///   conditions satisfied.
+    pub unsafe fn acquire_external_texture_ownership(
+        &mut self,
+        texture: &super::Texture,
+        range: &wgt::ImageSubresourceRange,
+        usage: wgt::TextureUses,
+        source_queue_family_index: u32,
+    ) {
+        debug_assert_ne!(self.active, vk::CommandBuffer::null());
+        debug_assert!(matches!(
+            source_queue_family_index,
+            vk::QUEUE_FAMILY_EXTERNAL | vk::QUEUE_FAMILY_FOREIGN_EXT
+        ));
+
+        let range = conv::map_subresource_range_combined_aspect(
+            range,
+            texture.format,
+            &self.device.private_caps,
+        );
+        let (src_stage, dst_stage, barrier) = make_acquire_image_memory_barrier(
+            texture.raw,
+            range,
+            texture.format,
+            usage,
+            source_queue_family_index,
+            self.device.family_index,
+        );
+        debug_assert!(!dst_stage.is_empty());
+
+        unsafe {
+            self.device.raw.cmd_pipeline_barrier(
+                self.active,
+                src_stage,
+                dst_stage,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            )
+        };
+    }
+
     fn write_pass_end_timestamp_if_requested(&mut self) {
         if let Some((query_set, index)) = self.end_of_pass_timer_query.take() {
             unsafe {
@@ -114,6 +177,35 @@ impl super::CommandEncoder {
             }
         })
     }
+}
+
+fn make_acquire_image_memory_barrier(
+    image: vk::Image,
+    range: vk::ImageSubresourceRange,
+    format: wgt::TextureFormat,
+    usage: wgt::TextureUses,
+    source_queue_family_index: u32,
+    destination_queue_family_index: u32,
+) -> (
+    vk::PipelineStageFlags,
+    vk::PipelineStageFlags,
+    vk::ImageMemoryBarrier<'static>,
+) {
+    let layout = conv::derive_image_layout(usage, format);
+    let (dst_stage, dst_access) = conv::map_texture_usage_to_barrier(usage);
+    (
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        dst_stage,
+        vk::ImageMemoryBarrier::default()
+            .image(image)
+            .subresource_range(range)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_access_mask(dst_access)
+            .old_layout(layout)
+            .new_layout(layout)
+            .src_queue_family_index(source_queue_family_index)
+            .dst_queue_family_index(destination_queue_family_index),
+    )
 }
 
 impl crate::CommandEncoder for super::CommandEncoder {
@@ -1530,4 +1622,46 @@ fn check_dst_image_layout() {
         conv::derive_image_layout(wgt::TextureUses::COPY_DST, wgt::TextureFormat::Rgba8Unorm),
         DST_IMAGE_LAYOUT
     );
+}
+
+#[test]
+fn check_acquire_texture_ownership_barrier() {
+    use ash::vk::Handle as _;
+
+    let range = vk::ImageSubresourceRange {
+        aspect_mask: vk::ImageAspectFlags::COLOR,
+        base_mip_level: 2,
+        level_count: 3,
+        base_array_layer: 4,
+        layer_count: 5,
+    };
+    let (src_stage, dst_stage, barrier) = make_acquire_image_memory_barrier(
+        vk::Image::from_raw(7),
+        range,
+        wgt::TextureFormat::Rgba8Unorm,
+        wgt::TextureUses::COPY_DST,
+        vk::QUEUE_FAMILY_EXTERNAL,
+        11,
+    );
+
+    assert_eq!(src_stage, vk::PipelineStageFlags::TOP_OF_PIPE);
+    assert_eq!(dst_stage, vk::PipelineStageFlags::TRANSFER);
+    assert_eq!(barrier.image, vk::Image::from_raw(7));
+    assert_eq!(barrier.subresource_range.aspect_mask, range.aspect_mask);
+    assert_eq!(
+        barrier.subresource_range.base_mip_level,
+        range.base_mip_level
+    );
+    assert_eq!(barrier.subresource_range.level_count, range.level_count);
+    assert_eq!(
+        barrier.subresource_range.base_array_layer,
+        range.base_array_layer
+    );
+    assert_eq!(barrier.subresource_range.layer_count, range.layer_count);
+    assert_eq!(barrier.old_layout, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
+    assert_eq!(barrier.new_layout, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
+    assert_eq!(barrier.src_access_mask, vk::AccessFlags::empty());
+    assert_eq!(barrier.dst_access_mask, vk::AccessFlags::TRANSFER_WRITE);
+    assert_eq!(barrier.src_queue_family_index, vk::QUEUE_FAMILY_EXTERNAL);
+    assert_eq!(barrier.dst_queue_family_index, 11);
 }
