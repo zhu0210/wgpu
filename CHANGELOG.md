@@ -42,6 +42,10 @@ Bottom level categories:
 
 ## Unreleased
 
+### Added/New Features
+
+- Added a Vulkan HAL method to acquire external texture queue ownership.
+
 ## v30.0.0 (2026-07-01)
 
 ### Major changes
