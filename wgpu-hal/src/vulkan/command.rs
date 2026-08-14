@@ -51,13 +51,16 @@ impl super::CommandEncoder {
     /// - The encoder must be recording and must not be inside a render, compute, or ray-tracing
     ///   pass.
     /// - `texture` must belong to the same Vulkan device as the encoder.
-    /// - `range`, `texture.format`, and `usage` must match the image subresources and layout
-    ///   recorded by `create_texture_from_hal`; in particular, `usage` must equal its
-    ///   `initial_state`.
+    /// - `range` and `texture.format` must match the image subresources recorded by
+    ///   `create_texture_from_hal`.
+    /// - `usage` must equal the wgpu tracker's state and the consumer command buffer's
+    ///   `initial_state`; the actual external image layout must be `GENERAL`.
     /// - `usage` must be a non-empty concrete texture state and must not contain `COMPLEX`,
     ///   `UNKNOWN`, or `TRANSIENT`.
     /// - The producer's release barrier and external synchronization must have completed, and
-    ///   the image must currently be owned by `source_queue_family_index`.
+    ///   the image must currently be owned by `source_queue_family_index` in `GENERAL` layout.
+    /// - This raw ownership command buffer must be recorded separately and ordered before the
+    ///   normal wgpu consumer command buffer in the same normal queue submission.
     /// - `source_queue_family_index` must be `VK_QUEUE_FAMILY_EXTERNAL_KHR` or
     ///   `VK_QUEUE_FAMILY_FOREIGN_EXT`, with the corresponding external-memory extension
     ///   conditions satisfied.
@@ -253,7 +256,7 @@ fn make_acquire_image_memory_barrier(
     vk::PipelineStageFlags,
     vk::ImageMemoryBarrier<'static>,
 ) {
-    let layout = conv::derive_image_layout(usage, format);
+    let destination_layout = conv::derive_image_layout(usage, format);
     let (dst_stage, dst_access) = conv::map_texture_usage_to_barrier(usage);
     (
         vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -263,8 +266,8 @@ fn make_acquire_image_memory_barrier(
             .subresource_range(range)
             .src_access_mask(vk::AccessFlags::empty())
             .dst_access_mask(dst_access)
-            .old_layout(layout)
-            .new_layout(layout)
+            .old_layout(vk::ImageLayout::GENERAL)
+            .new_layout(destination_layout)
             .src_queue_family_index(source_queue_family_index)
             .dst_queue_family_index(destination_queue_family_index),
     )
@@ -1750,7 +1753,7 @@ fn check_acquire_texture_ownership_barrier() {
         range.base_array_layer
     );
     assert_eq!(barrier.subresource_range.layer_count, range.layer_count);
-    assert_eq!(barrier.old_layout, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
+    assert_eq!(barrier.old_layout, vk::ImageLayout::GENERAL);
     assert_eq!(barrier.new_layout, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
     assert_eq!(barrier.src_access_mask, vk::AccessFlags::empty());
     assert_eq!(barrier.dst_access_mask, vk::AccessFlags::TRANSFER_WRITE);
