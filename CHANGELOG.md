@@ -257,6 +257,7 @@ By @sagudev in [#10109](https://github.com/gfx-rs/wgpu/pull/10109).
 ### Added/New Features
 
 - Added a Vulkan HAL method to acquire external texture queue ownership.
+- Added a Vulkan HAL method to release external texture queue ownership.
 
 ## v30.0.0 (2026-07-01)
 
