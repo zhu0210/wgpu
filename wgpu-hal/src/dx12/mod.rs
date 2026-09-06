@@ -952,6 +952,8 @@ impl crate::BufferBinding<'_, Buffer> {
 #[derive(Debug)]
 pub struct Texture {
     resource: Direct3D12::ID3D12Resource,
+    // Keep external producer leases alive until GPU-tracked destruction.
+    _drop_guard: Option<crate::DropGuard>,
     format: wgt::TextureFormat,
     dimension: wgt::TextureDimension,
     size: wgt::Extent3d,
@@ -1650,6 +1652,7 @@ impl crate::Surface for Surface {
                 sc.format.theoretical_memory_footprint(sc.size),
             ),
             plane_slice_override: None,
+            _drop_guard: None,
         };
         Ok(crate::AcquiredSurfaceTexture {
             texture,

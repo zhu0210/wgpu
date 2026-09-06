@@ -462,6 +462,7 @@ impl super::Device {
         &self.present_queue
     }
 
+    /// The optional callback retains external ownership until the texture is destroyed.
     pub unsafe fn texture_from_raw(
         resource: Direct3D12::ID3D12Resource,
         format: wgt::TextureFormat,
@@ -469,6 +470,7 @@ impl super::Device {
         size: wgt::Extent3d,
         mip_level_count: u32,
         sample_count: u32,
+        drop_callback: Option<crate::DropCallback>,
     ) -> super::Texture {
         super::Texture {
             resource,
@@ -482,6 +484,7 @@ impl super::Device {
                 format.theoretical_memory_footprint(size),
             ),
             plane_slice_override: None,
+            _drop_guard: crate::DropGuard::from_option(drop_callback),
         }
     }
 
@@ -604,6 +607,7 @@ impl crate::Device for super::Device {
             sample_count: desc.sample_count,
             allocation,
             plane_slice_override: None,
+            _drop_guard: None,
         })
     }
 

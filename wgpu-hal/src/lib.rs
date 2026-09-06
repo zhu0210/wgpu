@@ -330,7 +330,7 @@ pub type FenceValue = u64;
 pub type AtomicFenceValue = wgpu_sync::atomic::AtomicU64;
 
 /// A callback to signal that wgpu is no longer using a resource.
-#[cfg(all(any(gles, vulkan, metal), not(webgl)))]
+#[cfg(all(any(gles, vulkan, metal, dx12), not(webgl)))]
 pub type DropCallback = Box<dyn FnOnce() + Send + Sync + 'static>;
 
 /// A callback to signal that wgpu is no longer using a resource.
@@ -341,7 +341,7 @@ pub type DropCallback = Box<dyn FnOnce() + Send + Sync + 'static>;
 #[cfg(webgl)]
 pub type DropCallback = Box<dyn FnOnce() + 'static>;
 
-#[cfg(any(gles, vulkan, metal))]
+#[cfg(any(gles, vulkan, metal, dx12))]
 pub struct DropGuard {
     callback: Option<DropCallback>,
 }
@@ -355,7 +355,7 @@ unsafe impl Send for DropGuard {}
 #[cfg(all(webgl, send_sync))]
 unsafe impl Sync for DropGuard {}
 
-#[cfg(any(gles, vulkan, metal))]
+#[cfg(any(gles, vulkan, metal, dx12))]
 impl DropGuard {
     #[cfg(any(native, Emscripten))]
     fn from_option(callback: Option<DropCallback>) -> Option<Self> {
@@ -378,7 +378,7 @@ impl DropGuard {
     }
 }
 
-#[cfg(any(gles, vulkan, metal))]
+#[cfg(any(gles, vulkan, metal, dx12))]
 impl Drop for DropGuard {
     fn drop(&mut self) {
         if let Some(cb) = self.callback.take() {
@@ -387,7 +387,7 @@ impl Drop for DropGuard {
     }
 }
 
-#[cfg(any(gles, vulkan, metal))]
+#[cfg(any(gles, vulkan, metal, dx12))]
 impl fmt::Debug for DropGuard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DropGuard").finish()

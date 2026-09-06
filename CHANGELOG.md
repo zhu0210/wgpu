@@ -1,3 +1,7 @@
+## Fork: D3D12 external texture lifetime
+
+`wgpu-hal` D3D12 `Device::texture_from_raw` accepts an optional drop callback, matching Metal and Vulkan, so imported producer leases remain alive until GPU-tracked texture destruction.
+
 # Change Log
 
 <!--
