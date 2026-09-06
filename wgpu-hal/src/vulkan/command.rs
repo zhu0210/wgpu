@@ -89,6 +89,10 @@ impl super::CommandEncoder {
             usage,
             source_queue_family_index,
             self.device.family_index,
+            (
+                self.device.queue_flags,
+                self.device.private_caps.store_op_none,
+            ),
         );
         debug_assert!(!dst_stage.is_empty());
 
@@ -150,6 +154,10 @@ impl super::CommandEncoder {
             texture.format,
             self.device.family_index,
             destination_queue_family_index,
+            (
+                self.device.queue_flags,
+                self.device.private_caps.store_op_none,
+            ),
         );
         debug_assert!(!src_stage.is_empty());
         debug_assert!(!dst_stage.is_empty());
@@ -251,13 +259,15 @@ fn make_acquire_image_memory_barrier(
     usage: wgt::TextureUses,
     source_queue_family_index: u32,
     destination_queue_family_index: u32,
+    capabilities: (vk::QueueFlags, bool),
 ) -> (
     vk::PipelineStageFlags,
     vk::PipelineStageFlags,
     vk::ImageMemoryBarrier<'static>,
 ) {
     let destination_layout = conv::derive_image_layout(usage, format);
-    let (dst_stage, dst_access) = conv::map_texture_usage_to_barrier(usage);
+    let (dst_stage, dst_access) =
+        conv::map_texture_usage_to_barrier(usage, capabilities.0, capabilities.1);
     (
         vk::PipelineStageFlags::TOP_OF_PIPE,
         dst_stage,
@@ -279,12 +289,17 @@ fn make_release_image_memory_barrier(
     format: wgt::TextureFormat,
     source_queue_family_index: u32,
     destination_queue_family_index: u32,
+    capabilities: (vk::QueueFlags, bool),
 ) -> (
     vk::PipelineStageFlags,
     vk::PipelineStageFlags,
     vk::ImageMemoryBarrier<'static>,
 ) {
-    let (src_stage, src_access) = conv::map_texture_usage_to_barrier(wgt::TextureUses::RESOURCE);
+    let (src_stage, src_access) = conv::map_texture_usage_to_barrier(
+        wgt::TextureUses::RESOURCE,
+        capabilities.0,
+        capabilities.1,
+    );
     (
         src_stage,
         vk::PipelineStageFlags::BOTTOM_OF_PIPE,
@@ -1737,6 +1752,7 @@ fn check_acquire_texture_ownership_barrier() {
         wgt::TextureUses::COPY_DST,
         vk::QUEUE_FAMILY_EXTERNAL,
         11,
+        (vk::QueueFlags::GRAPHICS | vk::QueueFlags::COMPUTE, false),
     );
 
     assert_eq!(src_stage, vk::PipelineStageFlags::TOP_OF_PIPE);
@@ -1771,6 +1787,7 @@ fn check_release_texture_ownership_barrier() {
         wgt::TextureFormat::Rgba8Unorm,
         11,
         vk::QUEUE_FAMILY_FOREIGN_EXT,
+        (vk::QueueFlags::GRAPHICS | vk::QueueFlags::COMPUTE, false),
     );
 
     assert_eq!(
